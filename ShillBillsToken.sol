@@ -23,199 +23,151 @@ pragma solidity ^0.8.0;
 //
 // www.ShillBills.com | @shillbills | Compliant Utility Exempt  | No Fin Advice | Part of Rugdox Ecosystem (rugdox.com)                                                                               
 //                                                                                                      
-//
-//
+//  Not for use outside of the Rugdox and ShillBills Ecosystem.  any use by 3rd parties is not in our control.
+//  ShillBills and Rugdox LLC cannot be held responsible for any misuse of tokens once they are on-chain and deccentralized
+//  We do not and will not give financial advise.  This token was designed to be a utility first token, turn-in for future services,
+//  for DAO Voting/Governance, Rugdox Customer Rewards-Feedback and a route of communication with our primary consumers/end-users 
+//  to create targeting  products and services by allowing the DAO voting body to be a part of production and follow-up creations. 
+//  This is a new way of utilizing a DAO and we expect other organizations to soon follow.
 
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
+import "@openzeppelin/contracts/utils/math/SafeMath.sol";
 
 contract ShillBillsToken is ERC20, Ownable, ReentrancyGuard {
+    using SafeMath for uint256;
+
+    string public ipfsHash; // IPFS hash where the JSON configuration is stored
+    bool public isLocked; // Indicates if the IPFS hash is locked and cannot be updated
+
     uint256 public burnRate; // Burn rate in basis points (e.g., 10 for 0.1%)
     uint256 public transactionFeeRate; // Fee rate in basis points for buyback and burn (e.g., 10 for 0.1%)
     uint256 public feeThreshold; // Threshold for performing a buyback and burn
     uint256 public lotteryThreshold; // Threshold for triggering the lottery
-    uint256 public perTransactionLimit = 10 ether; // Maximum purchase per transaction
-    uint256 public perAddressLimit = 50 ether; // Maximum purchase per address
-    uint256 public globalSaleLimit = 1000 ether; // Maximum sale limit in a timeframe
-    uint256 public totalSales; // Tracks total sales in the pre-sale
-    uint256 public rate; // Tokens per ETH
 
-    address public buybackWallet; // Wallet for collecting fees before buyback
-    uint256 public accumulatedFees; // Accumulated fees for buyback or lottery
+    uint256 public accumulatedFees; // Accumulated fees from transactions
+    mapping(address => bool) public isExcludedFromFees; // Addresses excluded from fees
 
-    mapping(address => bool) public isWhitelisted;
-    mapping(address => bool) public isKYCCompleted;
-    mapping(address => uint256) public addressPurchases;
-    mapping(address => uint256) public lastPurchaseTime;
+    address[] public holders; // List of token holders for the lottery
+    mapping(address => uint256) public bonusTokens; // Tracks bonus tokens for each user
+    mapping(address => uint256) public lastClaimedTime; // Tracks the last time bonus tokens were claimed
+    mapping(address => bool) public claimedFirstHalf; // Tracks if the first half of bonus tokens has been claimed
+    mapping(address => bool) public claimedSecondHalf; // Tracks if the second half of bonus tokens has been claimed
 
-    struct Contribution {
-        uint256 ethAmount;
-        uint256 tokenAmount;
-        uint256 bonusTokens;
-        bool initialClaimed;
-        bool bonusClaimed14;
-        bool bonusClaimed30;
-        uint256 initialClaimTime;
-    }
+    address private _trustedContract; // Address of a trusted external contract for external calls
 
-    mapping(address => Contribution) public contributions;
-    address[] public holders;
-
-    event TokensPurchased(address indexed buyer, uint256 amount, uint256 bonus);
-    event BonusTokensClaimed(address indexed claimant, uint256 amount, string period);
+    event IPFSHashUpdated(string oldHash, string newHash);
+    event SettingsUpdated(uint256 burnRate, uint256 transactionFeeRate, uint256 feeThreshold, uint256 lotteryThreshold);
+    event IPFSHashLocked(string lockedHash);
     event BuybackAndBurn(uint256 amount);
-    event LotteryWinner(address indexed winner, uint256 amount);
+    event LotteryWinner(address indexed winner, uint256 prizeAmount);
+    event BonusAllocated(address indexed buyer, uint256 amount);
+    event BonusClaimed(address indexed claimant, uint256 amount);
 
     constructor(
         string memory name,
         string memory symbol,
         uint256 initialSupply,
-        uint256 _rate,
+        string memory _ipfsHash
+    ) ERC20(name, symbol) Ownable() {
+        _mint(address(this), initialSupply);  // Mint the initial supply to the contract itself
+        ipfsHash = _ipfsHash;  // Set the initial IPFS hash
+        isLocked = false;  // Initialize the lock status to false
+
+        // Exclude the contract address from fees (if applicable)
+        isExcludedFromFees[address(this)] = true;
+    }
+
+    // Function to update the IPFS hash
+    function updateIPFSHash(string memory newHash) external onlyOwner nonReentrant {
+        require(!isLocked, "IPFS hash is locked and cannot be updated");
+        string memory oldHash = ipfsHash;
+        ipfsHash = newHash;
+        emit IPFSHashUpdated(oldHash, newHash);
+    }
+
+    // Function to lock the IPFS hash, preventing further updates
+    function lockIPFSHash() external onlyOwner nonReentrant {
+        require(!isLocked, "IPFS hash is already locked");
+        isLocked = true;
+        emit IPFSHashLocked(ipfsHash);
+    }
+
+    // Function to update the contract's settings based on external inputs (provided by a front-end or external system)
+    function updateSettings(
         uint256 _burnRate,
         uint256 _transactionFeeRate,
         uint256 _feeThreshold,
-        uint256 _lotteryThreshold,
-        address _buybackWallet
-    ) ERC20(name, symbol) {
-        _mint(address(this), initialSupply); // Mint all tokens to contract
-        rate = _rate;
+        uint256 _lotteryThreshold
+    ) external onlyOwner nonReentrant {
+        require(!isLocked, "Contract settings cannot be updated once IPFS hash is locked");
+
         burnRate = _burnRate;
         transactionFeeRate = _transactionFeeRate;
         feeThreshold = _feeThreshold;
         lotteryThreshold = _lotteryThreshold;
-        buybackWallet = _buybackWallet;
+
+        emit SettingsUpdated(_burnRate, _transactionFeeRate, _feeThreshold, _lotteryThreshold);
     }
 
-    modifier onlyWhitelisted() {
-        require(isWhitelisted[msg.sender], "Not whitelisted");
-        _;
+    // Exclude an address from fees (e.g., for ICO funds collection)
+    function excludeFromFees(address account, bool excluded) external onlyOwner {
+        isExcludedFromFees[account] = excluded;
     }
 
-    modifier kycVerified() {
-        require(isKYCCompleted[msg.sender], "KYC not completed");
-        _;
-    }
-
-    modifier botControlled(uint256 amount) {
-        require(amount <= perTransactionLimit, "Exceeds per transaction limit");
-        require(addressPurchases[msg.sender] + amount <= perAddressLimit, "Exceeds per address limit");
-        require(block.timestamp >= lastPurchaseTime[msg.sender] + 1 minutes, "Rate limit exceeded");
-        require(totalSales + amount <= globalSaleLimit, "Global sale limit exceeded");
-        _;
-        lastPurchaseTime[msg.sender] = block.timestamp;
-        addressPurchases[msg.sender] += amount;
-        totalSales += amount;
-    }
-
-    function whitelistAddress(address _user) external onlyOwner {
-        isWhitelisted[_user] = true;
-    }
-
-    function removeWhitelistAddress(address _user) external onlyOwner {
-        isWhitelisted[_user] = false;
-    }
-
-    function markAsKYCCompleted(address _user) external onlyOwner {
-        isKYCCompleted[_user] = true;
-    }
-
-    function contributePreSale() external payable onlyWhitelisted kycVerified botControlled(msg.value) nonReentrant {
-        uint256 tokenAmount = msg.value * rate;
-        uint256 bonusPercent = calculateBonus(msg.value);
-        uint256 bonusTokens = (tokenAmount * bonusPercent) / 100;
-
-        contributions[msg.sender] = Contribution({
-            ethAmount: msg.value,
-            tokenAmount: tokenAmount,
-            bonusTokens: bonusTokens,
-            initialClaimed: false,
-            bonusClaimed14: false,
-            bonusClaimed30: false,
-            initialClaimTime: block.timestamp + 1 days
-        });
-
-        emit TokensPurchased(msg.sender, tokenAmount, bonusTokens);
-    }
-
-    function calculateBonus(uint256 ethSpent) internal pure returns (uint256) {
-        if (ethSpent >= 10 ether) {
-            return 10; // 10% bonus
-        } else if (ethSpent >= 5 ether) {
-            return 5; // 5% bonus
-        } else if (ethSpent >= 1 ether) {
-            return 2; // 2% bonus
-        } else {
-            return 0.5; // 0.5% bonus for small purchases
-        }
-    }
-
-    function claimTokens() external nonReentrant {
-        Contribution storage c = contributions[msg.sender];
-        require(block.timestamp >= c.initialClaimTime, "Tokens not ready for claim");
-        require(!c.initialClaimed, "Tokens already claimed");
-
-        c.initialClaimed = true;
-        _transfer(address(this), msg.sender, c.tokenAmount);
-    }
-
-    function claimBonusTokens(uint256 claimType) external nonReentrant {
-        Contribution storage c = contributions[msg.sender];
-        uint256 claimableAmount;
-
-        if (claimType == 14 && block.timestamp >= c.initialClaimTime + 14 days) {
-            require(!c.bonusClaimed14, "First bonus already claimed");
-            c.bonusClaimed14 = true;
-            claimableAmount = c.bonusTokens / 2;
-        } else if (claimType == 30 && block.timestamp >= c.initialClaimTime + 30 days) {
-            require(!c.bonusClaimed30, "Second bonus already claimed");
-            c.bonusClaimed30 = true;
-            claimableAmount = c.bonusTokens / 2;
-        } else {
-            revert("Invalid claim type or time");
-        }
-
-        _transfer(address(this), msg.sender, claimableAmount);
-    }
-
-    function transfer(address recipient, uint256 amount) public override returns (bool) {
+    // Override the transfer function to apply tokenomics
+    function transfer(address recipient, uint256 amount) public override nonReentrant returns (bool) {
         _applyTokenomics(_msgSender(), amount);
         return super.transfer(recipient, amount);
     }
 
-    function transferFrom(address sender, address recipient, uint256 amount) public override returns (bool) {
+    // Override the transferFrom function to apply tokenomics
+    function transferFrom(address sender, address recipient, uint256 amount) public override nonReentrant returns (bool) {
         _applyTokenomics(sender, amount);
         return super.transferFrom(sender, recipient, amount);
     }
 
+    // Apply tokenomics using the burn rate and transaction fee
     function _applyTokenomics(address sender, uint256 amount) internal {
-        uint256 burnAmount = (amount * burnRate) / 10000;
-        uint256 feeAmount = (amount * transactionFeeRate) / 10000;
+        // Skip fee application if the sender is excluded
+        if (isExcludedFromFees[sender]) {
+            return;
+        }
 
-        accumulatedFees += feeAmount;
+        uint256 burnAmount = amount.mul(burnRate).div(10000);
+        uint256 feeAmount = amount.mul(transactionFeeRate).div(10000);
+
+        accumulatedFees = accumulatedFees.add(feeAmount);
 
         _burn(sender, burnAmount);
         _transfer(sender, address(this), feeAmount);
 
+        // Trigger buyback and burn if the threshold is reached
         if (accumulatedFees >= feeThreshold) {
             _triggerBuybackAndBurn();
-        } else if (accumulatedFees >= lotteryThreshold) {
+        }
+
+        // Trigger lottery if the threshold is reached
+        if (accumulatedFees >= lotteryThreshold) {
             _triggerLottery();
         }
     }
 
+    // Function to trigger a buyback and burn
     function _triggerBuybackAndBurn() internal nonReentrant {
-        require(accumulatedFees >= feeThreshold, "Insufficient fees for buyback");
-
         uint256 buybackAmount = accumulatedFees;
         accumulatedFees = 0;
 
-        _transfer(address(this), buybackWallet, buybackAmount);
+        // Implement the buyback logic here (e.g., purchase tokens from a DEX)
+        // For simplicity, we burn the tokens directly
+        _burn(address(this), buybackAmount);
         emit BuybackAndBurn(buybackAmount);
     }
 
+    // Function to trigger a lottery
     function _triggerLottery() internal nonReentrant {
-        require(accumulatedFees >= lotteryThreshold, "Insufficient fees for lottery");
+        require(holders.length > 0, "No holders for the lottery");
 
         uint256 randomIndex = _getRandomNumber() % holders.length;
         address winner = holders[randomIndex];
@@ -226,24 +178,55 @@ contract ShillBillsToken is ERC20, Ownable, ReentrancyGuard {
         emit LotteryWinner(winner, prizeAmount);
     }
 
+    // Function to generate a pseudo-random number (for simplicity)
     function _getRandomNumber() internal view returns (uint256) {
         return uint256(keccak256(abi.encodePacked(block.timestamp, block.difficulty, holders.length)));
     }
 
-    function setBurnRate(uint256 newBurnRate) external onlyOwner {
-        require(newBurnRate <= 1000, "Burn rate too high"); // Max 10%
-        burnRate = newBurnRate;
+    // Function to add a holder (for simplicity, in a real scenario this would be more complex)
+    function addHolder(address holder) external onlyOwner {
+        holders.push(holder);
     }
 
-    function setTransactionFeeRate(uint256 newTransactionFeeRate) external onlyOwner {
-        require(newTransactionFeeRate <= 1000, "Transaction fee rate too high"); // Max 10%
-        transactionFeeRate = newTransactionFeeRate;
+    // Function to allocate bonus tokens to a buyer
+    function allocateBonus(address buyer, uint256 amount) external onlyOwner {
+        bonusTokens[buyer] = bonusTokens[buyer].add(amount);
+        emit BonusAllocated(buyer, amount);
     }
 
-    function setFeeThreshold(uint256 newFeeThreshold) external onlyOwner {
-        feeThreshold = newFeeThreshold;
+    // Function for users to claim their bonus tokens in two parts
+    function claimBonus() external nonReentrant {
+        require(bonusTokens[msg.sender] > 0, "No bonus tokens to claim");
+
+        uint256 amountToClaim;
+
+        // First half can be claimed after 14 days
+        if (!claimedFirstHalf[msg.sender] && block.timestamp >= lastClaimedTime[msg.sender] + 14 days) {
+            amountToClaim = bonusTokens[msg.sender].div(2);
+            claimedFirstHalf[msg.sender] = true;
+            emit BonusClaimed(msg.sender, amountToClaim);
+        }
+
+        // Second half can be claimed after 30 days
+        if (!claimedSecondHalf[msg.sender] && block.timestamp >= lastClaimedTime[msg.sender] + 30 days) {
+            amountToClaim = bonusTokens[msg.sender];
+            claimedSecondHalf[msg.sender] = true;
+            emit BonusClaimed(msg.sender, amountToClaim);
+        }
+
+        require(amountToClaim > 0, "No bonus available for claim at this time");
+
+        bonusTokens[msg.sender] = bonusTokens[msg.sender].sub(amountToClaim);
+        lastClaimedTime[msg.sender] = block.timestamp;
+
+        _transfer(address(this), msg.sender, amountToClaim);
     }
 
-    function setLotteryThreshold(uint256 newLotteryThreshold) external onlyOwner {
-        lotteryThreshold = newLotteryThreshold
+    // External contract call with trusted contract verification
+    function callExternalContract() public nonReentrant {
+        require(msg.sender == _trustedContract, "Caller is not authorized");
+        // Execute external contract call
+    }
+}
+
     
