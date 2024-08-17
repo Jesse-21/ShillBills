@@ -28,13 +28,19 @@ contract ShillBillsToken is ERC20, Ownable, ReentrancyGuard {
         uint256 claimedTime;
     }
 
-    uint256 public constant BONUS_TIER_1 = 1000 * 10**18;
-    uint256 public constant BONUS_TIER_2 = 5000 * 10**18;
-    uint256 public constant BONUS_TIER_3 = 10000 * 10**18;
-    
-    uint256 public constant BONUS_PERCENTAGE_TIER_1 = 5;
-    uint256 public constant BONUS_PERCENTAGE_TIER_2 = 10;
-    uint256 public constant BONUS_PERCENTAGE_TIER_3 = 15;
+    uint256 public constant BONUS_TIER_1 = 500 * 10**18;
+    uint256 public constant BONUS_TIER_2 = 1000 * 10**18;
+    uint256 public constant BONUS_TIER_3 = 5000 * 10**18;
+    uint256 public constant BONUS_TIER_4 = 10000 * 10**18;
+    uint256 public constant BONUS_TIER_5 = 50000 * 10**18;
+    uint256 public constant BONUS_TIER_6 = 100000 * 10**18;
+
+    uint256 public constant BONUS_PERCENTAGE_TIER_1 = .1;
+    uint256 public constant BONUS_PERCENTAGE_TIER_2 = .5;
+    uint256 public constant BONUS_PERCENTAGE_TIER_3 = .7;
+    uint256 public constant BONUS_PERCENTAGE_TIER_4 = 1;
+    uint256 public constant BONUS_PERCENTAGE_TIER_5 = 3;
+    uint256 public constant BONUS_PERCENTAGE_TIER_6 = 4;
 
     mapping(address => Bonus) public bonuses;
 
