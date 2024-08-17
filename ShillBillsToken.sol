@@ -1,42 +1,24 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.0;
+pragma solidity 0.8.20;
 
-//                                                                                                                           
-//                                                                                                                            
-//   SSSSSSSSSSSSSSS hhhhhhh               iiii  lllllll lllllll BBBBBBBBBBBBBBBBB     iiii  lllllll lllllll                  
-// SS:::::::::::::::Sh:::::h              i::::i l:::::l l:::::l B::::::::::::::::B   i::::i l:::::l l:::::l                  
-//S:::::SSSSSS::::::Sh:::::h               iiii  l:::::l l:::::l B::::::BBBBBB:::::B   iiii  l:::::l l:::::l                  
-//S:::::S     SSSSSSSh:::::h                     l:::::l l:::::l BB:::::B     B:::::B        l:::::l l:::::l                  
-//S:::::S             h::::h hhhhh       iiiiiii  l::::l  l::::l   B::::B     B:::::Biiiiiii  l::::l  l::::l     ssssssssss   
-//S:::::S             h::::hh:::::hhh    i:::::i  l::::l  l::::l   B::::B     B:::::Bi:::::i  l::::l  l::::l   ss::::::::::s  
-// S::::SSSS          h::::::::::::::hh   i::::i  l::::l  l::::l   B::::BBBBBB:::::B  i::::i  l::::l  l::::l ss:::::::::::::s 
-//  SS::::::SSSSS     h:::::::hhh::::::h  i::::i  l::::l  l::::l   B:::::::::::::BB   i::::i  l::::l  l::::l s::::::ssss:::::s
-//    SSS::::::::SS   h::::::h   h::::::h i::::i  l::::l  l::::l   B::::BBBBBB:::::B  i::::i  l::::l  l::::l  s:::::s  ssssss 
-//       SSSSSS::::S  h:::::h     h:::::h i::::i  l::::l  l::::l   B::::B     B:::::B i::::i  l::::l  l::::l    s::::::s      
-//            S:::::S h:::::h     h:::::h i::::i  l::::l  l::::l   B::::B     B:::::B i::::i  l::::l  l::::l       s::::::s   
-//            S:::::S h:::::h     h:::::h i::::i  l::::l  l::::l   B::::B     B:::::B i::::i  l::::l  l::::l ssssss   s:::::s 
-//SSSSSSS     S:::::S h:::::h     h:::::hi::::::il::::::ll::::::lBB:::::BBBBBB::::::Bi::::::il::::::ll::::::ls:::::ssss::::::s
-//S::::::SSSSSS:::::S h:::::h     h:::::hi::::::il::::::ll::::::lB:::::::::::::::::B i::::::il::::::ll::::::ls::::::::::::::s 
-//S:::::::::::::::SS  h:::::h     h:::::hi::::::il::::::ll::::::lB::::::::::::::::B  i::::::il::::::ll::::::l s:::::::::::ss  
-// SSSSSSSSSSSSSSS    hhhhhhh     hhhhhhhiiiiiiiillllllllllllllllBBBBBBBBBBBBBBBBB   iiiiiiiillllllllllllllll  sssssssssss    
-//+++++++++++++++++++++++++++++++++++++++[  Digital Pocket Lint For On-Chain Beggers  ]+++++++++++++++++++++++++++++++++++++++                                                                                                                            
-//
-// www.ShillBills.com | @shillbills | Compliant Utility Exempt  | No Fin Advice | Part of Rugdox Ecosystem (rugdox.com)                                                                               
-//                                                                                                      
-//  Not for use outside of the Rugdox and ShillBills Ecosystem.  any use by 3rd parties is not in our control.
-//  ShillBills and Rugdox LLC cannot be held responsible for any misuse of tokens once they are on-chain and deccentralized
-//  We do not and will not give financial advise.  This token was designed to be a utility first token, turn-in for future services,
-//  for DAO Voting/Governance, Rugdox Customer Rewards-Feedback and a route of communication with our primary consumers/end-users 
-//  to create targeting  products and services by allowing the DAO voting body to be a part of production and follow-up creations. 
-//  This is a new way of utilizing a DAO and we expect other organizations to soon follow.
-
+// //////////////////////////////////////////////////////////////////////////////
+// // ad88888ba   88           88  88  88  88888888ba   88  88  88             //
+// //d8"     "8b  88           ""  88  88  88      "8b  ""  88  88             //
+// //Y8,          88               88  88  88      ,8P      88  88             //
+// //`Y8aaaaa,    88,dPPYba,   88  88  88  88aaaaaa8P'  88  88  88  ,adPPYba,  //
+// //  `"""""8b,  88P'    "8a  88  88  88  88""""""8b,  88  88  88  I8[    ""  //
+// //        `8b  88       88  88  88  88  88      `8b  88  88  88   `"Y8ba,   //
+// //Y8a     a8P  88       88  88  88  88  88      a8P  88  88  88  aa    ]8I  //
+// // "Y88888P"   88       88  88  88  88  88888888P"   88  88  88  `"YbbdP"'  //
+// //////////////////////////////////////////////////////////////////////////////
+// ------------[ www.ShillBills.com  ]------------[ @shillbills]---------------//
+// ----[ Rugdox LLC ]------[ support@rugdox.com ]------[ @rugdoxofficial ]-----// 
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
-import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
-import "@openzeppelin/contracts/utils/math/SafeMath.sol";
-
+import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import "@openzeppelin/contracts/utils/math/math.sol";
 contract ShillBillsToken is ERC20, Ownable, ReentrancyGuard {
-    using SafeMath for uint256;
+    using Math for uint256;
 
     string public ipfsHash; // IPFS hash where the JSON configuration is stored
     bool public isLocked; // Indicates if the IPFS hash is locked and cannot be updated
@@ -70,8 +52,7 @@ contract ShillBillsToken is ERC20, Ownable, ReentrancyGuard {
         string memory symbol,
         uint256 initialSupply,
         string memory _ipfsHash
-    ) ERC20(name, symbol) Ownable() {
-        _mint(address(this), initialSupply);  // Mint the initial supply to the contract itself
+    ) ERC20(name, symbol) Ownable(msg.sender) {        _mint(address(this), initialSupply);  // Mint the initial supply to the contract itself
         ipfsHash = _ipfsHash;  // Set the initial IPFS hash
         isLocked = false;  // Initialize the lock status to false
 
@@ -135,10 +116,10 @@ contract ShillBillsToken is ERC20, Ownable, ReentrancyGuard {
             return;
         }
 
-        uint256 burnAmount = amount.mul(burnRate).div(10000);
-        uint256 feeAmount = amount.mul(transactionFeeRate).div(10000);
+        uint256 burnAmount = amount * burnRate / 10000;
+        uint256 feeAmount = amount * transactionFeeRate / 10000;
 
-        accumulatedFees = accumulatedFees.add(feeAmount);
+        accumulatedFees = accumulatedFees + feeAmount;
 
         _burn(sender, burnAmount);
         _transfer(sender, address(this), feeAmount);
@@ -190,7 +171,7 @@ contract ShillBillsToken is ERC20, Ownable, ReentrancyGuard {
 
     // Function to allocate bonus tokens to a buyer
     function allocateBonus(address buyer, uint256 amount) external onlyOwner {
-        bonusTokens[buyer] = bonusTokens[buyer].add(amount);
+        bonusTokens[buyer] = bonusTokens[buyer] + amount;
         emit BonusAllocated(buyer, amount);
     }
 
@@ -202,7 +183,7 @@ contract ShillBillsToken is ERC20, Ownable, ReentrancyGuard {
 
         // First half can be claimed after 14 days
         if (!claimedFirstHalf[msg.sender] && block.timestamp >= lastClaimedTime[msg.sender] + 14 days) {
-            amountToClaim = bonusTokens[msg.sender].div(2);
+            amountToClaim = bonusTokens[msg.sender] / 2;
             claimedFirstHalf[msg.sender] = true;
             emit BonusClaimed(msg.sender, amountToClaim);
         }
@@ -216,7 +197,7 @@ contract ShillBillsToken is ERC20, Ownable, ReentrancyGuard {
 
         require(amountToClaim > 0, "No bonus available for claim at this time");
 
-        bonusTokens[msg.sender] = bonusTokens[msg.sender].sub(amountToClaim);
+        bonusTokens[msg.sender] = bonusTokens[msg.sender] - amountToClaim;
         lastClaimedTime[msg.sender] = block.timestamp;
 
         _transfer(address(this), msg.sender, amountToClaim);
@@ -228,5 +209,3 @@ contract ShillBillsToken is ERC20, Ownable, ReentrancyGuard {
         // Execute external contract call
     }
 }
-
-    
