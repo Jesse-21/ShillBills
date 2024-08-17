@@ -28,19 +28,19 @@ contract ShillBillsToken is ERC20, Ownable, ReentrancyGuard {
         uint256 claimedTime;
     }
 
-    uint256 public constant BONUS_TIER_1 = 500 * 10**18;
-    uint256 public constant BONUS_TIER_2 = 1000 * 10**18;
-    uint256 public constant BONUS_TIER_3 = 5000 * 10**18;
-    uint256 public constant BONUS_TIER_4 = 10000 * 10**18;
-    uint256 public constant BONUS_TIER_5 = 50000 * 10**18;
-    uint256 public constant BONUS_TIER_6 = 100000 * 10**18;
+    uint256 public constant BONUS_TIER_1 = 5000 * 10**18;
+    uint256 public constant BONUS_TIER_2 = 10000 * 10**18;
+    uint256 public constant BONUS_TIER_3 = 50000 * 10**18;
+    uint256 public constant BONUS_TIER_4 = 100000 * 10**18;
+    uint256 public constant BONUS_TIER_5 = 500000 * 10**18;
+    uint256 public constant BONUS_TIER_6 = 1000000 * 10**18;
 
-    uint256 public constant BONUS_PERCENTAGE_TIER_1 = .1;
-    uint256 public constant BONUS_PERCENTAGE_TIER_2 = .5;
-    uint256 public constant BONUS_PERCENTAGE_TIER_3 = .7;
-    uint256 public constant BONUS_PERCENTAGE_TIER_4 = 1;
-    uint256 public constant BONUS_PERCENTAGE_TIER_5 = 3;
-    uint256 public constant BONUS_PERCENTAGE_TIER_6 = 4;
+    uint256 public constant BONUS_PERCENTAGE_TIER_1 = 10;  // 0.1% in basis points
+    uint256 public constant BONUS_PERCENTAGE_TIER_2 = 50;  // 0.5% in basis points
+    uint256 public constant BONUS_PERCENTAGE_TIER_3 = 70;  // 0.7% in basis points
+    uint256 public constant BONUS_PERCENTAGE_TIER_4 = 100; // 1% in basis points
+    uint256 public constant BONUS_PERCENTAGE_TIER_5 = 300; // 3% in basis points
+    uint256 public constant BONUS_PERCENTAGE_TIER_6 = 400; // 4% in basis points
 
     mapping(address => Bonus) public bonuses;
 
@@ -53,9 +53,6 @@ contract ShillBillsToken is ERC20, Ownable, ReentrancyGuard {
     mapping(address => bool) public isExcludedFromFees;
 
     address[] public holders;
-    mapping(address => uint256) public lastClaimedTime;
-    mapping(address => bool) public claimedFirstHalf;
-    mapping(address => bool) public claimedSecondHalf;
 
     address private _trustedContract;
 
@@ -83,12 +80,18 @@ contract ShillBillsToken is ERC20, Ownable, ReentrancyGuard {
     }
 
     function calculateBonus(uint256 purchaseAmount) internal pure returns (uint256) {
-        if (purchaseAmount >= BONUS_TIER_3) {
-            return purchaseAmount.mul(BONUS_PERCENTAGE_TIER_3).div(100);
+        if (purchaseAmount >= BONUS_TIER_6) {
+            return purchaseAmount.mul(BONUS_PERCENTAGE_TIER_6).div(10000);
+        } else if (purchaseAmount >= BONUS_TIER_5) {
+            return purchaseAmount.mul(BONUS_PERCENTAGE_TIER_5).div(10000);
+        } else if (purchaseAmount >= BONUS_TIER_4) {
+            return purchaseAmount.mul(BONUS_PERCENTAGE_TIER_4).div(10000);
+        } else if (purchaseAmount >= BONUS_TIER_3) {
+            return purchaseAmount.mul(BONUS_PERCENTAGE_TIER_3).div(10000);
         } else if (purchaseAmount >= BONUS_TIER_2) {
-            return purchaseAmount.mul(BONUS_PERCENTAGE_TIER_2).div(100);
+            return purchaseAmount.mul(BONUS_PERCENTAGE_TIER_2).div(10000);
         } else if (purchaseAmount >= BONUS_TIER_1) {
-            return purchaseAmount.mul(BONUS_PERCENTAGE_TIER_1).div(100);
+            return purchaseAmount.mul(BONUS_PERCENTAGE_TIER_1).div(10000);
         } else {
             return 0;
         }
@@ -152,6 +155,14 @@ contract ShillBillsToken is ERC20, Ownable, ReentrancyGuard {
         return super.transfer(recipient, amount);
     }
 
+    function transferFrom(address sender, address recipient, uint256 amount) public override nonReentrant returns (bool) {
+        _applyTokenomics(sender, amount);
+        return super.transferFrom(sender, recipient, amount);
+    }
+
+    functionIt seems the response was cut off. Here’s the continuation and completion of the smart contract:
+
+```solidity
     function transferFrom(address sender, address recipient, uint256 amount) public override nonReentrant returns (bool) {
         _applyTokenomics(sender, amount);
         return super.transferFrom(sender, recipient, amount);
