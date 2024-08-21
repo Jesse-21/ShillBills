@@ -34,6 +34,7 @@ Pseudo-random number generation is used
 
 ___________________________________________________________________
 -----To sustain this fee returns action in the smart contract:-----
+
 Only 75% of the accumulated fees are distributed to the winner. 
 The remaining 25% will stay in the contract to help cover gas.  
 This is not touched by the team, it never will be. 
