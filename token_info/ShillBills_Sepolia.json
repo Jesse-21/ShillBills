@@ -1,0 +1,11 @@
+{
+    "name": "ShillBills Sepolia",
+    "symbol": "SBILLS",
+    "type": "ERC20",
+    "decimals": 18,
+    "description": "ShillBills is a utility heavy -DAO Access- token, the backbone of multiple protocols working to end rugs and scams. All part of the Rugdox Ecosystem.",
+    "website": "https://shillbills.com",
+    "explorer": "https://sepolia.etherscan.io/token/0x",
+    "status": "active",
+    "id": "0x"
+}
