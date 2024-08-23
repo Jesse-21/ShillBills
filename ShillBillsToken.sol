@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity 0.8.20;
+pragma solidity ^0.8.10;
 
 // //////////////////////////////////////////////////////////////////////////////
 // // ad88888ba   88           88  88  88  88888888ba   88  88  88             //
@@ -13,14 +13,28 @@ pragma solidity 0.8.20;
 // //////////////////////////////////////////////////////////////////////////////
 // ------------[ www.ShillBills.com  ]------------[ @shillbills]---------------//
 // ----[ Rugdox LLC ]------[ support@rugdox.com ]------[ @rugdoxofficial ]-----// 
-//
-import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
-import "@openzeppelin/contracts/access/Ownable.sol";
-import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
-import "@openzeppelin/contracts/utils/math/SafeMath.sol";
+
+import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
+import {ReentrancyGuard} from "@openzeppelin/contracts/security/ReentrancyGuard.sol";
+import {SafeMath} from "@openzeppelin/contracts/utils/math/SafeMath.sol";
 
 contract ShillBillsToken is ERC20, Ownable, ReentrancyGuard {
     using SafeMath for uint256;
+
+    uint256 public feeRate = 10; // 0.1% fee rate in basis points
+    uint256 public accumulatedFees; // Accumulated fees for the lotto
+    uint256 public feeThreshold = 1000 * 10**18; // Threshold to trigger the lottery
+    uint256 public winnerShare = 75; // Winner receives 75% of the accumulated fees
+
+    uint256 public presaleTokensSold;
+    uint256 public constant PRESALE_LIMIT = 500000 * 10**18;
+    bool public isPresaleActive = true;
+
+    mapping(address => bool) public isExcludedFromFees;
+    mapping(address => Bonus) public bonuses;
+    mapping(address => bool) public isHolder;
+    address[] public holders;
 
     struct Bonus {
         uint256 firstHalf;
@@ -28,73 +42,87 @@ contract ShillBillsToken is ERC20, Ownable, ReentrancyGuard {
         uint256 claimedTime;
     }
 
-    uint256 public constant BONUS_TIER_1 = 5000 * 10**18;
-    uint256 public constant BONUS_TIER_2 = 10000 * 10**18;
-    uint256 public constant BONUS_TIER_3 = 50000 * 10**18;
-    uint256 public constant BONUS_TIER_4 = 100000 * 10**18;
-    uint256 public constant BONUS_TIER_5 = 500000 * 10**18;
-    uint256 public constant BONUS_TIER_6 = 1000000 * 10**18;
-
-    uint256 public constant BONUS_PERCENTAGE_TIER_1 = 10;  // 0.1% in basis points
-    uint256 public constant BONUS_PERCENTAGE_TIER_2 = 50;  // 0.5% in basis points
-    uint256 public constant BONUS_PERCENTAGE_TIER_3 = 70;  // 0.7% in basis points
-    uint256 public constant BONUS_PERCENTAGE_TIER_4 = 100; // 1% in basis points
-    uint256 public constant BONUS_PERCENTAGE_TIER_5 = 300; // 3% in basis points
-    uint256 public constant BONUS_PERCENTAGE_TIER_6 = 400; // 4% in basis points
-
-    mapping(address => Bonus) public bonuses;
-
-    uint256 public burnRate;
-    uint256 public transactionFeeRate;
-    uint256 public feeThreshold;
-    uint256 public lotteryThreshold;
-
-    uint256 public accumulatedFees;
-    mapping(address => bool) public isExcludedFromFees;
-
-    address[] public holders;
-
-    address private _trustedContract;
-
-    event IPFSHashUpdated(string oldHash, string newHash);
-    event SettingsUpdated(uint256 burnRate, uint256 transactionFeeRate, uint256 feeThreshold, uint256 lotteryThreshold);
-    event IPFSHashLocked(string lockedHash);
-    event BuybackAndBurn(uint256 amount);
+    event FeeCollected(address indexed from, uint256 amount);
     event LotteryWinner(address indexed winner, uint256 prizeAmount);
-    event BonusAllocated(address indexed buyer, uint256 amount);
-    event BonusClaimed(address indexed claimant, uint256 amount);
+    event Purchase(address indexed buyer, uint256 amount, bool isPresale);
+    event BonusAllocated(address indexed buyer, uint256 bonusAmount);
+    event BonusClaimed(address indexed claimer, uint256 amount);
 
-    constructor(string memory name, string memory symbol, uint256 initialSupply) ERC20(name, symbol) Ownable() {
-        _mint(address(this), initialSupply);
+    constructor(
+        string memory name,
+        string memory symbol,
+        address initialOwner
+    ) ERC20(name, symbol) Ownable(initialOwner) {
+        _mint(address(this), 500000 * 10**18); // Initial supply is hardcoded for simplicity
     }
 
-    function buyTokens(address recipient, uint256 amount) external nonReentrant {
-        _transfer(address(this), recipient, amount);
-        uint256 bonusAmount = calculateBonus(amount);
+    function setFeeRate(uint256 newFeeRate) external onlyOwner {
+        feeRate = newFeeRate;
+    }
 
-        if (bonusAmount > 0) {
-            bonuses[recipient].firstHalf = bonuses[recipient].firstHalf.add(bonusAmount.div(2));
-            bonuses[recipient].secondHalf = bonuses[recipient].secondHalf.add(bonusAmount.div(2));
+    function excludeFromFees(address account) external onlyOwner {
+        isExcludedFromFees[account] = true;
+    }
+
+    function includeInFees(address account) external onlyOwner {
+        isExcludedFromFees[account] = false;
+    }
+
+    function buyTokens(address recipient, uint256 amount) external payable nonReentrant {
+        uint256 fee = amount.mul(feeRate).div(10000);
+        uint256 netAmount = amount.sub(fee);
+
+        accumulatedFees = accumulatedFees.add(fee);
+        emit FeeCollected(recipient, fee);
+
+        uint256 tokensToTransfer = netAmount;
+        uint256 bonusAmount = 0;
+
+        // Presale 2-for-1 bonus logic
+        if (isPresaleActive && presaleTokensSold < PRESALE_LIMIT) {
+            uint256 availableForBonus = PRESALE_LIMIT.sub(presaleTokensSold);
+
+            if (amount > availableForBonus) {
+                bonusAmount = availableForBonus;
+            } else {
+                bonusAmount = amount;
+            }
+
+            tokensToTransfer = netAmount.add(bonusAmount);
+            presaleTokensSold = presaleTokensSold.add(amount);
+
+            if (presaleTokensSold >= PRESALE_LIMIT) {
+                isPresaleActive = false;
+            }
+        }
+
+        _transfer(address(this), recipient, tokensToTransfer);
+
+        // Allocate the bonus tokens
+        uint256 calculatedBonus = calculateBonus(amount);
+        if (calculatedBonus > 0) {
+            bonuses[recipient].firstHalf = bonuses[recipient].firstHalf.add(calculatedBonus.div(2));
+            bonuses[recipient].secondHalf = bonuses[recipient].secondHalf.add(calculatedBonus.div(2));
             bonuses[recipient].claimedTime = block.timestamp;
+            emit BonusAllocated(recipient, calculatedBonus);
+        }
+
+        emit Purchase(recipient, tokensToTransfer, isPresaleActive);
+
+        // Add recipient to holders list if not already present
+        if (!isHolder[recipient]) {
+            holders.push(recipient);
+            isHolder[recipient] = true;
+        }
+
+        // Check if accumulated fees have reached the threshold
+        if (accumulatedFees >= feeThreshold) {
+            _triggerLottery();
         }
     }
 
     function calculateBonus(uint256 purchaseAmount) internal pure returns (uint256) {
-        if (purchaseAmount >= BONUS_TIER_6) {
-            return purchaseAmount.mul(BONUS_PERCENTAGE_TIER_6).div(10000);
-        } else if (purchaseAmount >= BONUS_TIER_5) {
-            return purchaseAmount.mul(BONUS_PERCENTAGE_TIER_5).div(10000);
-        } else if (purchaseAmount >= BONUS_TIER_4) {
-            return purchaseAmount.mul(BONUS_PERCENTAGE_TIER_4).div(10000);
-        } else if (purchaseAmount >= BONUS_TIER_3) {
-            return purchaseAmount.mul(BONUS_PERCENTAGE_TIER_3).div(10000);
-        } else if (purchaseAmount >= BONUS_TIER_2) {
-            return purchaseAmount.mul(BONUS_PERCENTAGE_TIER_2).div(10000);
-        } else if (purchaseAmount >= BONUS_TIER_1) {
-            return purchaseAmount.mul(BONUS_PERCENTAGE_TIER_1).div(10000);
-        } else {
-            return 0;
-        }
+        return purchaseAmount.mul(10).div(100); // Example: 10% bonus
     }
 
     function claimBonus() external nonReentrant {
@@ -102,11 +130,13 @@ contract ShillBillsToken is ERC20, Ownable, ReentrancyGuard {
 
         uint256 amountToClaim = 0;
 
+        // Claim first half after 14 days
         if (bonuses[msg.sender].firstHalf > 0 && block.timestamp >= bonuses[msg.sender].claimedTime + 14 days) {
             amountToClaim = bonuses[msg.sender].firstHalf;
             bonuses[msg.sender].firstHalf = 0;
         }
 
+        // Claim second half after 30 days
         if (bonuses[msg.sender].secondHalf > 0 && block.timestamp >= bonuses[msg.sender].claimedTime + 30 days) {
             amountToClaim = amountToClaim.add(bonuses[msg.sender].secondHalf);
             bonuses[msg.sender].secondHalf = 0;
@@ -115,119 +145,55 @@ contract ShillBillsToken is ERC20, Ownable, ReentrancyGuard {
         require(amountToClaim > 0, "No bonus available for claim at this time");
 
         _transfer(address(this), msg.sender, amountToClaim);
+        emit BonusClaimed(msg.sender, amountToClaim);
     }
 
-    // Reentrancy protection and safe arithmetic have been integrated into key functions
+    function _applyFeeAndLotto(address sender, address recipient, uint256 amount) internal nonReentrant {
+        uint256 fee = 0;
 
-    function updateIPFSHash(string memory newHash) external onlyOwner nonReentrant {
-        require(!isLocked, "IPFS hash is locked and cannot be updated");
-        string memory oldHash = ipfsHash;
-        ipfsHash = newHash;
-        emit IPFSHashUpdated(oldHash, newHash);
-    }
+        if (!isExcludedFromFees[sender]) {
+            fee = amount.mul(feeRate).div(10000);
+            uint256 netAmount = amount.sub(fee);
 
-    function lockIPFSHash() external onlyOwner nonReentrant {
-        require(!isLocked, "IPFS hash is already locked");
-        isLocked = true;
-        emit IPFSHashLocked(ipfsHash);
-    }
+            accumulatedFees = accumulatedFees.add(fee);
+            emit FeeCollected(sender, fee);
 
-    function updateSettings(
-        uint256 _burnRate,
-        uint256 _transactionFeeRate,
-        uint256 _feeThreshold,
-        uint256 _lotteryThreshold
-    ) external onlyOwner nonReentrant {
-        burnRate = _burnRate;
-        transactionFeeRate = _transactionFeeRate;
-        feeThreshold = _feeThreshold;
-        lotteryThreshold = _lotteryThreshold;
+            _transfer(sender, address(this), fee);
 
-        emit SettingsUpdated(_burnRate, _transactionFeeRate, _feeThreshold, _lotteryThreshold);
-    }
+            if (!isHolder[recipient]) {
+                holders.push(recipient);
+                isHolder[recipient] = true;
+            }
 
-    function excludeFromFees(address account, bool excluded) external onlyOwner {
-        isExcludedFromFees[account] = excluded;
-    }
-
-    function transfer(address recipient, uint256 amount) public override nonReentrant returns (bool) {
-        _applyTokenomics(_msgSender(), amount);
-        return super.transfer(recipient, amount);
-    }
-
-    function transferFrom(address sender, address recipient, uint256 amount) public override nonReentrant returns (bool) {
-        _applyTokenomics(sender, amount);
-        return super.transferFrom(sender, recipient, amount);
-    }
-
-    functionIt seems the response was cut off. Here’s the continuation and completion of the smart contract:
-
-```solidity
-    function transferFrom(address sender, address recipient, uint256 amount) public override nonReentrant returns (bool) {
-        _applyTokenomics(sender, amount);
-        return super.transferFrom(sender, recipient, amount);
-    }
-
-    function _applyTokenomics(address sender, uint256 amount) internal {
-        if (isExcludedFromFees[sender]) {
-            return;
+            _transfer(sender, recipient, netAmount); // Use netAmount after fee deduction
+        } else {
+            _transfer(sender, recipient, amount); // No fee applied, transfer the full amount
         }
 
-        uint256 burnAmount = amount.mul(burnRate).div(10000);
-        uint256 feeAmount = amount.mul(transactionFeeRate).div(10000);
-
-        accumulatedFees = accumulatedFees.add(feeAmount);
-
-        _burn(sender, burnAmount);
-        _transfer(sender, address(this), feeAmount);
-
+        // Check if accumulated fees have reached the threshold
         if (accumulatedFees >= feeThreshold) {
-            _triggerBuybackAndBurn();
-        }
-
-        if (accumulatedFees >= lotteryThreshold) {
             _triggerLottery();
         }
     }
 
-    function _triggerBuybackAndBurn() internal nonReentrant {
-        uint256 buybackAmount = accumulatedFees;
-        accumulatedFees = 0;
-        _burn(address(this), buybackAmount);
-        emit BuybackAndBurn(buybackAmount);
-    }
-
     function _triggerLottery() internal nonReentrant {
-        require(holders.length > 0, "No holders for the lottery");
+        require(holders.length > 0, "No holders available for lottery");
 
         uint256 randomIndex = _getRandomNumber() % holders.length;
         address winner = holders[randomIndex];
-        uint256 prizeAmount = accumulatedFees;
-        accumulatedFees = 0;
 
-        _transfer(address(this), winner, prizeAmount);
-        emit LotteryWinner(winner, prizeAmount);
+        uint256 prize = accumulatedFees.mul(winnerShare).div(100);
+        accumulatedFees = accumulatedFees.sub(prize);
+
+        _transfer(address(this), winner, prize);
+        emit LotteryWinner(winner, prize);
     }
 
     function _getRandomNumber() internal view returns (uint256) {
-        return uint256(keccak256(abi.encodePacked(block.timestamp, block.difficulty, holders.length)));
+        return uint256(keccak256(abi.encodePacked(block.number, block.difficulty, msg.sender)));
     }
 
-    function addHolder(address holder) external onlyOwner {
-        holders.push(holder);
-    }
-
-    function callExternalContract() public nonReentrant {
-        require(msg.sender == _trustedContract, "Caller is not authorized");
-    }
-
-    function deposit(uint256 amount) external {
-        require(balanceOf(address(this)).add(amount) >= balanceOf(address(this)), "Integer overflow");
-        _mint(address(this), amount);
-    }
-
-    function secureTransfer(address _to, uint256 _value) external {
-        (bool success, ) = _to.call(abi.encodeWithSignature("transfer(uint256)", _value));
-        require(success, "External call failed");
+    receive() external payable {
+        revert("Contract does not accept Ether.");
     }
 }
