@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.10;
+pragma solidity ^0.8.0;
 
 // //////////////////////////////////////////////////////////////////////////////
 // // ad88888ba   88           88  88  88  88888888ba   88  88  88             //
@@ -13,6 +13,8 @@ pragma solidity ^0.8.10;
 // //////////////////////////////////////////////////////////////////////////////
 // ------------[ www.ShillBills.com  ]------------[ @shillbills]---------------//
 // ----[ Rugdox LLC ]------[ support@rugdox.com ]------[ @rugdoxofficial ]-----// 
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.10;
 
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
@@ -30,6 +32,8 @@ contract ShillBillsToken is ERC20, Ownable, ReentrancyGuard {
     uint256 public presaleTokensSold;
     uint256 public constant PRESALE_LIMIT = 500000 * 10**18;
     bool public isPresaleActive = true;
+
+    uint256 public tokenPriceInWei = 1000000000000000; // Example: 0.001 ETH per token
 
     mapping(address => bool) public isExcludedFromFees;
     mapping(address => Bonus) public bonuses;
@@ -60,6 +64,10 @@ contract ShillBillsToken is ERC20, Ownable, ReentrancyGuard {
         feeRate = newFeeRate;
     }
 
+    function setTokenPrice(uint256 newPriceInWei) external onlyOwner {
+        tokenPriceInWei = newPriceInWei;
+    }
+
     function excludeFromFees(address account) external onlyOwner {
         isExcludedFromFees[account] = true;
     }
@@ -68,12 +76,17 @@ contract ShillBillsToken is ERC20, Ownable, ReentrancyGuard {
         isExcludedFromFees[account] = false;
     }
 
-    function buyTokens(address recipient, uint256 amount) external payable nonReentrant {
+    function buyTokens() external payable nonReentrant {
+        require(msg.value > 0, "Send ETH to buy tokens");
+
+        uint256 amount = msg.value.div(tokenPriceInWei).mul(10**decimals());
+        require(amount > 0, "Not enough ETH sent");
+
         uint256 fee = amount.mul(feeRate).div(10000);
         uint256 netAmount = amount.sub(fee);
 
         accumulatedFees = accumulatedFees.add(fee);
-        emit FeeCollected(recipient, fee);
+        emit FeeCollected(msg.sender, fee);
 
         uint256 tokensToTransfer = netAmount;
         uint256 bonusAmount = 0;
@@ -96,23 +109,23 @@ contract ShillBillsToken is ERC20, Ownable, ReentrancyGuard {
             }
         }
 
-        _transfer(address(this), recipient, tokensToTransfer);
+        _transfer(address(this), msg.sender, tokensToTransfer);
 
         // Allocate the bonus tokens
         uint256 calculatedBonus = calculateBonus(amount);
         if (calculatedBonus > 0) {
-            bonuses[recipient].firstHalf = bonuses[recipient].firstHalf.add(calculatedBonus.div(2));
-            bonuses[recipient].secondHalf = bonuses[recipient].secondHalf.add(calculatedBonus.div(2));
-            bonuses[recipient].claimedTime = block.timestamp;
-            emit BonusAllocated(recipient, calculatedBonus);
+            bonuses[msg.sender].firstHalf = bonuses[msg.sender].firstHalf.add(calculatedBonus.div(2));
+            bonuses[msg.sender].secondHalf = bonuses[msg.sender].secondHalf.add(calculatedBonus.div(2));
+            bonuses[msg.sender].claimedTime = block.number; // Block number instead of timestamp
+            emit BonusAllocated(msg.sender, calculatedBonus);
         }
 
-        emit Purchase(recipient, tokensToTransfer, isPresaleActive);
+        emit Purchase(msg.sender, tokensToTransfer, isPresaleActive);
 
         // Add recipient to holders list if not already present
-        if (!isHolder[recipient]) {
-            holders.push(recipient);
-            isHolder[recipient] = true;
+        if (!isHolder[msg.sender]) {
+            holders.push(msg.sender);
+            isHolder[msg.sender] = true;
         }
 
         // Check if accumulated fees have reached the threshold
@@ -131,13 +144,13 @@ contract ShillBillsToken is ERC20, Ownable, ReentrancyGuard {
         uint256 amountToClaim = 0;
 
         // Claim first half after 14 days
-        if (bonuses[msg.sender].firstHalf > 0 && block.timestamp >= bonuses[msg.sender].claimedTime + 14 days) {
+        if (bonuses[msg.sender].firstHalf > 0 && block.number >= bonuses[msg.sender].claimedTime + 14 * 5760) {
             amountToClaim = bonuses[msg.sender].firstHalf;
             bonuses[msg.sender].firstHalf = 0;
         }
 
         // Claim second half after 30 days
-        if (bonuses[msg.sender].secondHalf > 0 && block.timestamp >= bonuses[msg.sender].claimedTime + 30 days) {
+        if (bonuses[msg.sender].secondHalf > 0 && block.number >= bonuses[msg.sender].claimedTime + 30 * 5760) {
             amountToClaim = amountToClaim.add(bonuses[msg.sender].secondHalf);
             bonuses[msg.sender].secondHalf = 0;
         }
@@ -194,6 +207,11 @@ contract ShillBillsToken is ERC20, Ownable, ReentrancyGuard {
     }
 
     receive() external payable {
-        revert("Contract does not accept Ether.");
+        revert("Direct Ether deposits not allowed. Use buyTokens.");
+    }
+
+    function withdraw() external onlyOwner {
+        payable(owner()).transfer(address(this).balance);
     }
 }
+
