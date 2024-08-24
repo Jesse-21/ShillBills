@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.0;
+pragma solidity ^0.8.10;
 
 // //////////////////////////////////////////////////////////////////////////////
 // // ad88888ba   88           88  88  88  88888888ba   88  88  88             //
@@ -13,8 +13,6 @@ pragma solidity ^0.8.0;
 // //////////////////////////////////////////////////////////////////////////////
 // ------------[ www.ShillBills.com  ]------------[ @shillbills]---------------//
 // ----[ Rugdox LLC ]------[ support@rugdox.com ]------[ @rugdoxofficial ]-----// 
-// SPDX-License-Identifier: MIT
-pragma solidity ^0.8.10;
 
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
@@ -32,6 +30,7 @@ contract ShillBillsToken is ERC20, Ownable, ReentrancyGuard {
     uint256 public presaleTokensSold;
     uint256 public constant PRESALE_LIMIT = 500000 * 10**18;
     bool public isPresaleActive = true;
+    bool public tokensMinted = false;
 
     uint256 public tokenPriceInWei = 1000000000000000; // Example: 0.001 ETH per token
 
@@ -56,8 +55,13 @@ contract ShillBillsToken is ERC20, Ownable, ReentrancyGuard {
         string memory name,
         string memory symbol,
         address initialOwner
-    ) ERC20(name, symbol) Ownable(initialOwner) {
-        _mint(address(this), 500000 * 10**18); // Initial supply is hardcoded for simplicity
+    ) ERC20(name, symbol) Ownable(initialOwner) {}
+
+    // Mass mint all tokens to the contract
+    function massMintTokens(uint256 totalSupply) public onlyOwner {
+        require(!tokensMinted, "Tokens already minted");
+        _mint(address(this), totalSupply);
+        tokensMinted = true;
     }
 
     function setFeeRate(uint256 newFeeRate) external onlyOwner {
@@ -78,6 +82,7 @@ contract ShillBillsToken is ERC20, Ownable, ReentrancyGuard {
 
     function buyTokens() external payable nonReentrant {
         require(msg.value > 0, "Send ETH to buy tokens");
+        require(tokensMinted, "Tokens not minted yet");
 
         uint256 amount = msg.value.div(tokenPriceInWei).mul(10**decimals());
         require(amount > 0, "Not enough ETH sent");
@@ -214,4 +219,3 @@ contract ShillBillsToken is ERC20, Ownable, ReentrancyGuard {
         payable(owner()).transfer(address(this).balance);
     }
 }
-
