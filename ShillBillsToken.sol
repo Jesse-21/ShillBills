@@ -19,7 +19,7 @@ import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import {SafeMath} from "@openzeppelin/contracts/utils/math/SafeMath.sol";
 
-contract ShillBillsToken is ERC20, Ownable, ReentrancyGuard {
+contract ShillBills is ERC20, Ownable, ReentrancyGuard {
     using SafeMath for uint256;
 
     uint256 public feeRate = 10; // 0.1% fee rate in basis points
@@ -56,6 +56,7 @@ contract ShillBillsToken is ERC20, Ownable, ReentrancyGuard {
         string memory symbol,
         address initialOwner
     ) ERC20(name, symbol) Ownable(initialOwner) {}
+
 
     // Mass mint all tokens to the contract
     function massMintTokens(uint256 totalSupply) public onlyOwner {
