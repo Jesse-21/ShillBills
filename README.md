@@ -1,20 +1,6 @@
 # ShillBills
 
 
-// //////////////////////////////////////////////////////////////////////////////<BR>
-// // ad88888ba   88           88  88  88  88888888ba   88  88  88             //<BR>
-// //d8"     "8b  88           ""  88  88  88      "8b  ""  88  88             //<BR>
-// //Y8,          88               88  88  88      ,8P      88  88             //<BR>
-// //`Y8aaaaa,    88,dPPYba,   88  88  88  88aaaaaa8P'  88  88  88  ,adPPYba,  //<BR>
-// //  `"""""8b,  88P'    "8a  88  88  88  88""""""8b,  88  88  88  I8[    ""  //<BR>
-// //        `8b  88       88  88  88  88  88      `8b  88  88  88   `"Y8ba,   //<BR>
-// //Y8a     a8P  88       88  88  88  88  88      a8P  88  88  88  aa    ]8I  //<BR>
-// // "Y88888P"   88       88  88  88  88  88888888P"   88  88  88  `"YbbdP"'  //<BR>
-// //////////////////////////////////////////////////////////////////////////////<BR>
-// ------------[ www.ShillBills.com  ]------------[ @shillbills]---------------//<BR>
-// ----[ Rugdox LLC ]------[ support@rugdox.com ]------[ @rugdoxofficial ]-----// <BR>
-<BR>
-<BR>
 This is the primary location for code related to the ShillBills Multi-Utillity Token
 and it's various other parts like UI on frontend, dao related code/info, and more.
 We will do our best to keep this updated.  If you run a platform or token list,
